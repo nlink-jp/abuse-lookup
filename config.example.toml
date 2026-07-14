@@ -1,0 +1,19 @@
+# abuse-lookup configuration.
+# Copy to ~/.config/abuse-lookup/config.toml and fill in your API key.
+# The key is a secret — do not commit a real value.
+
+[abuseipdb]
+# Free API key from https://www.abuseipdb.com/account/api . The
+# ABUSEIPDB_API_KEY environment variable overrides this value.
+key = "REPLACE_WITH_YOUR_ABUSEIPDB_API_KEY"
+
+# Override the AbuseIPDB API base URL (optional; defaults to the v2 endpoint).
+# base_url = "https://api.abuseipdb.com/api/v2"
+
+[cache]
+# How long a cached reputation result is reused before a fresh lookup.
+# Default 12 hours. Use --refresh to ignore the cache for a single call.
+# ttl_hours = 12
+
+# Override where cached results are stored (optional).
+# dir = "~/.local/share/abuse-lookup/cache"
