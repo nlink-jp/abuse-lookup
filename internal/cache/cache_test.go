@@ -109,9 +109,9 @@ func TestListSortedAndClear(t *testing.T) {
 	c := New(t.TempDir(), time.Hour)
 	base := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
 	c.now = func() time.Time { return base }
-	c.Put("1.1.1.1", 90, false, []byte(`{}`))
+	_ = c.Put("1.1.1.1", 90, false, []byte(`{}`))
 	c.now = func() time.Time { return base.Add(time.Minute) }
-	c.Put("2.2.2.2", 90, false, []byte(`{}`))
+	_ = c.Put("2.2.2.2", 90, false, []byte(`{}`))
 
 	recs, err := c.List()
 	if err != nil {

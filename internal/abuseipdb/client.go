@@ -188,7 +188,7 @@ func (c *HTTPClient) do(ctx context.Context, path string, q url.Values) ([]byte,
 	if err != nil {
 		return nil, nil, fmt.Errorf("abuseipdb: request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	rl := parseRateLimit(resp.Header)
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))

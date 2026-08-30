@@ -33,7 +33,7 @@ func TestCheckSuccess(t *testing.T) {
 		}
 		w.Header().Set("X-RateLimit-Limit", "1000")
 		w.Header().Set("X-RateLimit-Remaining", "997")
-		w.Write([]byte(okBody))
+		_, _ = w.Write([]byte(okBody))
 	}))
 	defer srv.Close()
 
@@ -58,7 +58,7 @@ func TestCheckVerbose(t *testing.T) {
 		if !r.URL.Query().Has("verbose") {
 			t.Error("verbose flag missing")
 		}
-		w.Write([]byte(okBody))
+		_, _ = w.Write([]byte(okBody))
 	}))
 	defer srv.Close()
 
@@ -72,7 +72,7 @@ func TestCheckRateLimited(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "3600")
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"errors":[{"detail":"Daily rate limit of 1000 requests exceeded","status":429}]}`))
+		_, _ = w.Write([]byte(`{"errors":[{"detail":"Daily rate limit of 1000 requests exceeded","status":429}]}`))
 	}))
 	defer srv.Close()
 
@@ -89,7 +89,7 @@ func TestCheckRateLimited(t *testing.T) {
 func TestCheckAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write([]byte(`{"errors":[{"detail":"The ip address must be a valid IP address.","status":422}]}`))
+		_, _ = w.Write([]byte(`{"errors":[{"detail":"The ip address must be a valid IP address.","status":422}]}`))
 	}))
 	defer srv.Close()
 
@@ -125,7 +125,7 @@ func TestReports(t *testing.T) {
 		if got := r.URL.Query().Get("perPage"); got != "10" {
 			t.Errorf("perPage = %q, want 10", got)
 		}
-		w.Write([]byte(`{"data":{"total":42,"page":2,"count":1,"perPage":10,` +
+		_, _ = w.Write([]byte(`{"data":{"total":42,"page":2,"count":1,"perPage":10,` +
 			`"nextPageUrl":"/api/v2/reports?page=3","previousPageUrl":"/api/v2/reports?page=1",` +
 			`"results":[{"reportedAt":"2020-01-02T03:04:05+00:00","comment":"SSH bruteforce",` +
 			`"categories":[18,22],"reporterId":7,"reporterCountryCode":"US","reporterCountryName":"United States"}]}}`))
@@ -152,7 +152,7 @@ func TestReports(t *testing.T) {
 func TestReportsRateLimited(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte(`{"errors":[{"detail":"rate limit","status":429}]}`))
+		_, _ = w.Write([]byte(`{"errors":[{"detail":"rate limit","status":429}]}`))
 	}))
 	defer srv.Close()
 

@@ -153,7 +153,7 @@ func (c *Cache) writeAtomic(name string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("open cache dir %s: %w", c.dir, err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	tmp := name + ".tmp"
 	if err := root.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write cache %s: %w", name, err)

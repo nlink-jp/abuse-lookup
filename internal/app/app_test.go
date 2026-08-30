@@ -37,7 +37,7 @@ func testServer(t *testing.T) (*httptest.Server, *int32) {
 		atomic.AddInt32(&hits, 1)
 		w.Header().Set("X-RateLimit-Limit", "1000")
 		w.Header().Set("X-RateLimit-Remaining", "990")
-		w.Write([]byte(sampleBody))
+		_, _ = w.Write([]byte(sampleBody))
 	}))
 	t.Cleanup(srv.Close)
 	return srv, &hits
@@ -250,7 +250,7 @@ const reportsBody = `{"data":{"total":42,"page":1,"count":2,"perPage":25,` +
 func TestCmdReportsHumanAndJSON(t *testing.T) {
 	clearEnv(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(reportsBody))
+		_, _ = w.Write([]byte(reportsBody))
 	}))
 	t.Cleanup(srv.Close)
 	cfg := writeConfig(t, srv.URL, "k")

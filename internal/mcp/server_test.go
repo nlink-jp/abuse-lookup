@@ -117,7 +117,7 @@ func TestServeSequence(t *testing.T) {
 		ServerInfo   struct{ Name string } `json:"serverInfo"`
 		Instructions string                `json:"instructions"`
 	}
-	json.Unmarshal(resps[0].Result, &initRes)
+	_ = json.Unmarshal(resps[0].Result, &initRes)
 	if initRes.ServerInfo.Name != "abuse-lookup" {
 		t.Errorf("serverInfo.name = %q", initRes.ServerInfo.Name)
 	}
@@ -128,7 +128,7 @@ func TestServeSequence(t *testing.T) {
 	var listRes struct {
 		Tools []struct{ Name string } `json:"tools"`
 	}
-	json.Unmarshal(resps[1].Result, &listRes)
+	_ = json.Unmarshal(resps[1].Result, &listRes)
 	if len(listRes.Tools) != 4 {
 		t.Errorf("tools = %d, want 4", len(listRes.Tools))
 	}
