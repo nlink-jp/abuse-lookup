@@ -115,23 +115,21 @@ also advertises this via the MCP `instructions` field):
 
 | Tool | Arguments | Purpose |
 |------|-----------|---------|
-| `get_usage` | — | Operating manual: tools, caching model, workspace model, recovery table |
+| `get_usage` | — | Operating manual: tools, caching model, pagination, recovery table |
 | `check_ip` | `ip` (string) or `ips` (array), `max_age`, `verbose`, `refresh` | IP → reputation (cached) |
-| `get_reports` | `ip`, `max_age`, `page`, `per_page`, `limit`, `workspace_root`, `workspace_id` | IP → paginated reports (large pages file-mediated) |
+| `get_reports` | `ip`, `max_age`, `page`, `per_page` | IP → one page of reports, always inline |
 | `cache_status` | — | Cache directory, TTL, entry/fresh counts |
 
 **Caching.** `check_ip` results are cached per `(IP, max_age, verbose)` for the
 configured TTL (default 12h) and returned with `cached: true` without spending
 quota; pass `refresh: true` to force a live lookup.
 
-**Large report pages are file-mediated.** `get_reports` always returns page
-metadata (`total`, `page`, `count`, `has_next_page`) plus an inline preview; when
-a page exceeds `limit` (default 25) the full page is written to a file and only
-its path is returned (`reports_file`, `truncated: true`) — so a busy IP never
-floods the model's context. The output directory is agent-provided: create a
-directory with your own file tools and pass it as `workspace_root` (essential in
-sandboxed environments); omit it to use the server default. All writes are
-confined to the workspace with `os.Root` (planted symlinks cannot escape).
+**Reports are returned inline; you size the page.** `get_reports` returns page
+metadata (`total`, `page`, `count`, `has_next_page`) and the whole page in
+`reports`. The server writes no files and needs no directory from you, so it
+behaves identically against a client that has no filesystem of its own. Bound one
+response with `per_page` and walk the rest with `page` — nothing is truncated, so
+`total` and `count` always reflect the real numbers.
 
 ## Configuration
 
@@ -160,8 +158,6 @@ key = "your_key_here"
 
 # [mcp]
 # Default output directory for file-mediated get_reports results
-# (ABUSE_LOOKUP_WORKSPACE). Callers may override per request with workspace_root.
-# workspace = "~/.local/state/abuse-lookup/workspace"
 ```
 
 **Cache location** — `~/.local/share/abuse-lookup/cache`

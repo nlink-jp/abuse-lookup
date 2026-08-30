@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- **`get_reports` always returns the page inline.** The MCP tool no longer
+  writes large pages to a file, and `workspace_root` / `workspace_id` / `limit`
+  are gone from its schema along with the `reports_file` / `truncated` /
+  `preview` / `note` result fields. The size of one response is bounded by
+  `per_page`, and `page` walks the rest — `total` and `count` are unchanged, so
+  nothing is dropped.
+
+  Migration: replace a `workspace_root` call plus a file read with a smaller
+  `per_page` and, when `has_next_page` is true, a request for `page+1`.
+
+### Removed
+
+- The `[mcp] workspace` config key and the `ABUSE_LOOKUP_WORKSPACE` environment
+  variable. The server no longer has an output directory: it touches no
+  filesystem, so it works unchanged against a client that has none.
+
 ## [0.1.0] - 2026-07-14
 
 ### Added

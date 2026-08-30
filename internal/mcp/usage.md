@@ -33,16 +33,9 @@ One page of the individual abuse reports for a single IP.
   - `page` (integer, default 1) / `per_page` (integer, default 25): pagination,
     caller-driven. Use `has_next_page` in the result to decide whether to request
     the next `page`.
-  - `limit` (integer, default 25): max reports inlined before a file is written.
-  - `workspace_root` (string): **absolute path** to a directory you prepared with
-    your own file tools; the full page is written here when large. Omit to use the
-    server default (may be unwritable in a sandbox — prefer passing this).
-  - `workspace_id` (string): optional single-segment subdirectory under the root.
 - Result: a JSON array with one object holding `input`, `total`, `page`, `count`,
-  `per_page`, `has_next_page`, and:
-  - small page → `reports` (the full inline list), `truncated:false`.
-  - large page → `preview` (first `limit`), `truncated:true`, and `reports_file`
-    (absolute path to the full page). **Read that file** for the complete page.
+  `per_page`, `has_next_page`, and `reports` — the whole page, always inline.
+  Nothing is written to disk and no path is returned.
 
 ### `cache_status`
 Reports `cache_dir`, `ttl`, `entries`, and `fresh` (count within the TTL). No
@@ -55,19 +48,18 @@ arguments.
 API quota. Use `refresh:true` to force a live lookup. `get_reports` is **not**
 cached — it is a paginated detail fetch.
 
-## Workspace model (why files, not bytes)
+## Sizing a page
 
-A single `get_reports` page can hold many verbose reports; returning them all
-inline would flood your context, so large pages are written to a file and only
-the path is returned. `total` and `count` always reflect the real numbers —
-nothing is silently dropped.
+A single `get_reports` page can hold many verbose reports, and this server
+returns every one of them inline — it never writes files and never asks you for
+a directory, so it behaves identically against a client that has no filesystem
+of its own.
 
-The output directory is **caller-provided**: create a writable directory with
-your own file tools and pass it as `workspace_root`. This is required in
-sandboxed environments where the server cannot write under `$HOME`. Writes are
-confined to the workspace (kernel-enforced via `os.Root`); the filename is
-server-generated (`reports-<ip>-p<page>.json`), so you never control the leaf
-name.
+That makes the page size **your** control. `per_page` bounds one response;
+`has_next_page` tells you whether more exist, and `page` walks them. If a page
+is larger than your context can hold, ask for a smaller `per_page` rather than a
+truncated result — `total` and `count` always reflect the real numbers, so
+nothing is ever silently dropped.
 
 ## Recovery table
 
@@ -76,8 +68,8 @@ name.
 | `no AbuseIPDB API key configured` | No key is set | Ask the user to set `ABUSEIPDB_API_KEY` or `[abuseipdb] key` |
 | `AbuseIPDB daily rate limit exceeded` | The 1000/day free quota is used up | Wait for the daily reset; do not retry immediately |
 | `check_ip` → `{input, error:"invalid IP address …"}` | The input was not a valid IP | Fix the input |
-| `get_reports` → `truncated:true`, `reports_file` set | The full page was written to a file | Read `reports_file` for the complete page |
-| `get_reports` → `note` mentions `workspace_root` | The output file could not be written | Create a writable directory and pass its absolute path as `workspace_root` |
+| `get_reports` → the response is larger than you can hold | `per_page` was too large for your context | Re-request with a smaller `per_page`; walk the rest with `page` |
+| `get_reports` → `has_next_page:true` | More reports exist beyond this page | Request `page+1`; `total` says how many there are in all |
 | `check_ip` → `cached:true` | Result came from the local cache | Expected; pass `refresh:true` for a live value |
 
 ## Attribution

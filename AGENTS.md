@@ -29,7 +29,6 @@ internal/abuseipdb/     AbuseIPDB API v2 client: Client interface + HTTPClient.
 internal/cache/         TTL JSON cache; atomic write via os.Root; key = IP+max-age+verbose.
 internal/config/        Sectioned-TOML subset parser + env/flag resolution.
 internal/engine/        Ties config+client+cache: Check (cached), Reports (uncached).
-internal/workspace/     Agent-provided output dir + os.Root write containment.
 internal/app/           CLI: dispatch, check/reports/doctor/cache/mcp, output.
 internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   usage.md              Embedded get_usage manual (pinned by usage_test.go).
@@ -50,12 +49,14 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
 - **Reports are not cached.** `get_reports` / the `reports` command are a
   secondary, paginated detail fetch; pagination is caller-driven (`page`,
   `per_page`).
-- **Large `get_reports` pages are file-mediated** (asn-lookup / voice-studio-mcp
-  pattern). A busy IP can have hundreds of reports; the MCP tool returns metadata
-  + a preview inline and writes the full page to an agent-provided
-  `workspace_root` (default when omitted), returning the path. Writes go through
-  `os.Root`. The workspace MUST be agent-specifiable — a hardcoded home-dir path
-  breaks in sandboxes like Cowork.
+- **No filesystem, ever.** Every tool result is returned inline; the server owns
+  no output directory and takes no `workspace_root`. It used to spill large
+  `get_reports` pages to a file, which made the server depend on the client
+  having a filesystem it could name — and put the "too big for the model"
+  judgement in the one process that cannot know the model's context window.
+  Bounding a response is the caller's job (`per_page`) and spilling an oversized
+  result is the client's job. Do not reintroduce file mediation here: a page that
+  is too large is a `per_page` that was too large.
 - **Read-only scope.** The tool never calls AbuseIPDB's write endpoints
   (`report`, `bulk-report`, `clear-address`) — submitting to the shared database
   is out of scope.
@@ -75,11 +76,6 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   non-flag). Keep using it if you add positional commands.
 - **`mcp` starts without a key:** so `get_usage` / `cache_status` still work;
   API-backed tools return a clear error when no key is configured.
-- **Workspace writes:** all `get_reports` file writes go through
-  `workspace.WriteFileAtomic` (os.Root). Never write MCP outputs with plain
-  `os.WriteFile` — that defeats symlink containment. The filename is
-  server-generated (`reports-<ip>-p<page>.json`), so callers never control the
-  leaf name.
 - **get_usage manual:** `internal/mcp/usage.md` is embedded and returned by the
   `get_usage` tool; the initialize `instructions` field points clients to it.
   When you add/rename a tool or a result field, update usage.md — `usage_test.go`

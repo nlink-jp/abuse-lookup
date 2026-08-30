@@ -26,7 +26,6 @@ internal/abuseipdb/     AbuseIPDB API v2 client (Client interface + HTTPClient)
 internal/cache/         TTL JSON cache; atomic write via os.Root
 internal/config/        Sectioned-TOML subset + env/flag resolution
 internal/engine/        Check (cached) / Reports (uncached) — shared by CLI & MCP
-internal/workspace/     Agent-provided output dir + os.Root write containment
 internal/app/           Dispatch + check/reports/doctor/cache/mcp + output
 internal/mcp/           Zero-dep stdio JSON-RPC 2.0 server + tools
 ```
@@ -44,8 +43,10 @@ only.** See [docs/en/architecture.md](docs/en/architecture.md) for the "why".
   never a CLI flag (would leak into shell history / the process list).
 - Cache key is `(IP, max-age, verbose)`; freshness lives in the record
   (`FetchedAt`), not the file mtime; writes are atomic (temp + rename, `os.Root`).
-- Reports are not cached; large `get_reports` pages are file-mediated to an
-  agent-provided `workspace_root` (os.Root containment).
+- Reports are not cached, and `get_reports` returns the whole page inline: the
+  server owns no output directory and takes no `workspace_root`. Bounding a
+  response is the caller's job (`per_page`); spilling an oversized one is the
+  client's. Do not reintroduce file mediation.
 - Read-only scope: never calls AbuseIPDB's write endpoints (`report`,
   `bulk-report`, `clear-address`).
 - Attribution: keep the AbuseIPDB credit in `version`, `--help`, and the READMEs;

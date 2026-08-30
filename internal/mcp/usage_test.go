@@ -22,8 +22,8 @@ func TestUsageDocumentsEveryTool(t *testing.T) {
 	}
 	// Result fields and knobs that agents depend on must stay documented.
 	for _, term := range []string{
-		"reports_file", "truncated", "has_next_page",
-		"workspace_root", "refresh", "cached", "rate limit",
+		"has_next_page", "per_page", "page",
+		"refresh", "cached", "rate limit",
 	} {
 		if !strings.Contains(usageMarkdown, term) {
 			t.Errorf("usage.md missing key term %q", term)

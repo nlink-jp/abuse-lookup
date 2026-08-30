@@ -23,11 +23,10 @@ const (
 
 // Config holds resolved runtime settings.
 type Config struct {
-	APIKey    string        // AbuseIPDB API key (secret; never logged verbatim)
-	BaseURL   string        // AbuseIPDB API base URL
-	CacheDir  string        // directory holding cached reputation results
-	CacheTTL  time.Duration // how long a cached result stays fresh
-	Workspace string        // default MCP output directory for file-mediated results
+	APIKey   string        // AbuseIPDB API key (secret; never logged verbatim)
+	BaseURL  string        // AbuseIPDB API base URL
+	CacheDir string        // directory holding cached reputation results
+	CacheTTL time.Duration // how long a cached result stays fresh
 }
 
 // Load resolves configuration. If configPath is empty the default location
@@ -36,10 +35,9 @@ type Config struct {
 // wins over both.
 func Load(configPath, keyOverride string) (*Config, error) {
 	cfg := &Config{
-		BaseURL:   DefaultBaseURL,
-		CacheDir:  DefaultCacheDir(),
-		CacheTTL:  DefaultTTLHours * time.Hour,
-		Workspace: DefaultWorkspaceDir(),
+		BaseURL:  DefaultBaseURL,
+		CacheDir: DefaultCacheDir(),
+		CacheTTL: DefaultTTLHours * time.Hour,
 	}
 
 	if configPath == "" {
@@ -69,9 +67,6 @@ func Load(configPath, keyOverride string) (*Config, error) {
 	}
 	if v := firstEnv("ABUSE_LOOKUP_CACHE_DIR"); v != "" {
 		cfg.CacheDir = v
-	}
-	if v := firstEnv("ABUSE_LOOKUP_WORKSPACE"); v != "" {
-		cfg.Workspace = v
 	}
 
 	// Explicit flag overrides win.
@@ -106,11 +101,6 @@ func applySections(cfg *Config, sections map[string]map[string]string) error {
 			cfg.CacheTTL = time.Duration(h * float64(time.Hour))
 		}
 	}
-	if m := sections["mcp"]; m != nil {
-		if v := m["workspace"]; v != "" {
-			cfg.Workspace = expandHome(v)
-		}
-	}
 	return nil
 }
 
@@ -137,19 +127,6 @@ func DefaultCacheDir() string {
 		return "cache"
 	}
 	return filepath.Join(home, ".local", "share", "abuse-lookup", "cache")
-}
-
-// DefaultWorkspaceDir returns the default MCP output directory, honoring
-// XDG_STATE_HOME (file-mediated results are reproducible, transient state).
-func DefaultWorkspaceDir() string {
-	if x := os.Getenv("XDG_STATE_HOME"); x != "" {
-		return filepath.Join(x, "abuse-lookup", "workspace")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "abuse-lookup", "workspace")
 }
 
 func firstEnv(names ...string) string {

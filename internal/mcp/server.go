@@ -10,7 +10,6 @@ import (
 	"io"
 
 	"github.com/nlink-jp/abuse-lookup/internal/engine"
-	"github.com/nlink-jp/abuse-lookup/internal/workspace"
 )
 
 // defaultProtocolVersion is advertised when the client sends none.
@@ -51,18 +50,18 @@ func textResult(isErr bool, text string) toolResult {
 	return toolResult{Content: []contentItem{{Type: "text", Text: text}}, IsError: isErr}
 }
 
-// server holds the shared engine, version, and the workspace manager for
-// file-mediated results.
+// server holds the shared engine and version. It owns no filesystem state:
+// every tool result is returned inline, so the server works unchanged against
+// a client that has no filesystem of its own.
 type server struct {
 	e       *engine.Engine
 	version string
-	ws      *workspace.Manager
 }
 
 // Serve runs the MCP protocol loop until in reaches EOF. It is safe to point in
 // at os.Stdin and out at os.Stdout; diagnostics must go to stderr only.
 func Serve(ctx context.Context, e *engine.Engine, version string, in io.Reader, out io.Writer) error {
-	s := &server{e: e, version: version, ws: workspace.NewManager(e.Config().Workspace)}
+	s := &server{e: e, version: version}
 	dec := json.NewDecoder(in)
 	enc := json.NewEncoder(out)
 	for {

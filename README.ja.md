@@ -109,22 +109,21 @@ claude mcp add abuse-lookup -- /path/to/abuse-lookup mcp
 
 | ツール | 引数 | 用途 |
 |------|-----------|---------|
-| `get_usage` | — | マニュアル: ツール・キャッシュ・ワークスペース・リカバリ表 |
+| `get_usage` | — | マニュアル: ツール・キャッシュ・ページング・リカバリ表 |
 | `check_ip` | `ip` (string) / `ips` (array), `max_age`, `verbose`, `refresh` | IP → 評判（キャッシュ） |
-| `get_reports` | `ip`, `max_age`, `page`, `per_page`, `limit`, `workspace_root`, `workspace_id` | IP → 通報明細（大きいページはファイル媒介） |
+| `get_reports` | `ip`, `max_age`, `page`, `per_page` | IP → 通報明細 1 ページ（常にインライン） |
 | `cache_status` | — | キャッシュのディレクトリ・TTL・件数 |
 
 **キャッシュ.** `check_ip` の結果は `(IP, max_age, verbose)` 単位で設定 TTL（既定
 12h）だけキャッシュされ、`cached: true` として**クォータを消費せず**返されます。
 `refresh: true` でライブ取得を強制できます。
 
-**大きい通報ページはファイル媒介.** `get_reports` は常にページメタ情報（`total` /
-`page` / `count` / `has_next_page`）とインラインプレビューを返し、ページが `limit`
-（既定 25）を超えるとフルページをファイルに書き出しパスのみ返します（`reports_file` /
-`truncated: true`）。出力先は呼び出し側が用意します: 自分のファイルツールで
-ディレクトリを作り `workspace_root` に渡してください（サンドボックス環境で必須）。
-省略時はサーバー既定を使用。書き込みは `os.Root` でワークスペースに封じ込め
-（仕込まれた symlink は脱出不可）。
+**通報明細は常にインライン返却。ページの大きさは呼び出し側が決める.**
+`get_reports` はページメタ情報（`total` / `page` / `count` / `has_next_page`）と
+ページ全体を `reports` に入れて返します。サーバーはファイルを書かず、
+ディレクトリの用意も求めないので、**ファイルシステムを持たないクライアントでも
+同じように動作します**。1 回の応答量は `per_page` で抑え、続きは `page` で辿って
+ください。切り捨ては行わないため `total` と `count` は常に実数です。
 
 ## 設定
 
@@ -150,10 +149,6 @@ key = "your_key_here"
 # ttl_hours = 12
 # dir = "~/.local/share/abuse-lookup/cache"
 
-# [mcp]
-# get_reports のファイル媒介結果の既定出力先（ABUSE_LOOKUP_WORKSPACE）。
-# 呼び出しごとに workspace_root で上書き可能。
-# workspace = "~/.local/state/abuse-lookup/workspace"
 ```
 
 **キャッシュ保存先** — `~/.local/share/abuse-lookup/cache`

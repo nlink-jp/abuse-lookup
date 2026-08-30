@@ -5,11 +5,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/nlink-jp/abuse-lookup/internal/abuseipdb"
-	"github.com/nlink-jp/abuse-lookup/internal/workspace"
 )
 
 // usageMarkdown is the operating manual returned by the get_usage tool. Its
@@ -23,12 +20,9 @@ var usageMarkdown string
 // errors.
 const Instructions = "abuse-lookup checks IP reputation via the AbuseIPDB API (online; an API key must be configured). " +
 	"Results are cached locally with a TTL, so repeated check_ip calls do not re-spend the daily quota. " +
-	"Large get_reports results are file-mediated: pass a writable workspace_root and read the returned reports_file. " +
+	"get_reports returns one page inline; walk large report sets with page / per_page. " +
 	"The daily free quota is limited (1000 checks); a rate-limit error means wait for the daily reset. " +
 	"Call get_usage for the full tool reference and error-recovery table."
-
-// defaultReportsPreview is how many reports are inlined before a file is written.
-const defaultReportsPreview = 25
 
 // toolsList returns the advertised tool set with JSON Schema for each input.
 func (s *server) toolsList() any {
@@ -37,7 +31,7 @@ func (s *server) toolsList() any {
 		"tools": []map[string]any{
 			{
 				"name":        "get_usage",
-				"description": "Return this server's operating manual (markdown): the tools, the caching model, the workspace model for file-mediated results, rate limits, and the error-recovery table. Call it once before first use.",
+				"description": "Return this server's operating manual (markdown): the tools, the caching model, pagination, rate limits, and the error-recovery table. Call it once before first use.",
 				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
 			},
 			{
@@ -58,18 +52,15 @@ func (s *server) toolsList() any {
 			{
 				"name": "get_reports",
 				"description": "Fetch one page of the individual abuse reports for a single IP. " +
-					"Always returns page metadata (total, page, count, has_next_page). Small pages inline the reports; large pages are NOT inlined — the full page is written to a file in the workspace and its path is returned (truncated=true). " +
-					"Pagination is caller-driven via page / per_page. To receive the file in a sandbox, pass a writable workspace_root.",
+					"The page is always returned inline, together with its metadata (total, page, count, has_next_page). " +
+					"Pagination is caller-driven via page / per_page: keep a page small enough for your context and walk large report sets with page.",
 				"inputSchema": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"ip":             map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address (required)."},
-						"max_age":        map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
-						"page":           map[string]any{"type": "integer", "description": "1-based page number (default 1)."},
-						"per_page":       map[string]any{"type": "integer", "description": "Reports per page (default 25)."},
-						"limit":          map[string]any{"type": "integer", "description": "Max reports to inline before writing a file (default 25)."},
-						"workspace_root": map[string]any{"type": "string", "description": "Absolute path to an agent-prepared directory for the output file; omit to use the server default."},
-						"workspace_id":   map[string]any{"type": "string", "description": "Optional single-segment subdirectory under the workspace root."},
+						"ip":       map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address (required)."},
+						"max_age":  map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
+						"page":     map[string]any{"type": "integer", "description": "1-based page number (default 1)."},
+						"per_page": map[string]any{"type": "integer", "description": "Reports per page (default 25)."},
 					},
 				},
 			},
@@ -149,8 +140,9 @@ func (s *server) toolCheckIP(ctx context.Context, args json.RawMessage) toolResu
 	return jsonResult(entries)
 }
 
-// reportsEntry is the file-mediated reports result. Small pages inline Reports;
-// large pages inline a Preview and write the full page to a file.
+// reportsEntry is one page of reports, always inline. The caller bounds the
+// size with per_page and walks the rest with page — the server never spills to
+// a file, so it works against a client with no filesystem of its own.
 type reportsEntry struct {
 	Input       string             `json:"input"`
 	Total       int                `json:"total"`
@@ -158,22 +150,15 @@ type reportsEntry struct {
 	Count       int                `json:"count"`
 	PerPage     int                `json:"per_page"`
 	HasNextPage bool               `json:"has_next_page"`
-	Truncated   bool               `json:"truncated"`
-	Reports     []abuseipdb.Report `json:"reports,omitempty"`
-	Preview     []abuseipdb.Report `json:"preview,omitempty"`
-	ReportsFile string             `json:"reports_file,omitempty"`
-	Note        string             `json:"note,omitempty"`
+	Reports     []abuseipdb.Report `json:"reports"`
 }
 
 func (s *server) toolGetReports(ctx context.Context, args json.RawMessage) toolResult {
 	var a struct {
-		IP            string `json:"ip"`
-		MaxAge        *int   `json:"max_age"`
-		Page          *int   `json:"page"`
-		PerPage       *int   `json:"per_page"`
-		Limit         *int   `json:"limit"`
-		WorkspaceRoot string `json:"workspace_root"`
-		WorkspaceID   string `json:"workspace_id"`
+		IP      string `json:"ip"`
+		MaxAge  *int   `json:"max_age"`
+		Page    *int   `json:"page"`
+		PerPage *int   `json:"per_page"`
 	}
 	_ = json.Unmarshal(args, &a)
 	if a.IP == "" {
@@ -190,11 +175,6 @@ func (s *server) toolGetReports(ctx context.Context, args json.RawMessage) toolR
 	if a.PerPage != nil && *a.PerPage >= 1 {
 		perPage = *a.PerPage
 	}
-	preview := defaultReportsPreview
-	if a.Limit != nil && *a.Limit >= 0 {
-		preview = *a.Limit
-	}
-
 	outcome, err := s.e.Reports(ctx, a.IP, maxAge, page, perPage)
 	if err != nil {
 		if errors.Is(err, abuseipdb.ErrRateLimited) {
@@ -207,32 +187,8 @@ func (s *server) toolGetReports(ctx context.Context, args json.RawMessage) toolR
 		Input: a.IP, Total: pg.Total, Page: pg.Page, Count: pg.Count,
 		PerPage: pg.PerPage, HasNextPage: pg.NextPageURL != "",
 	}
-	if len(pg.Results) <= preview {
-		e.Reports = pg.Results
-	} else {
-		e.Truncated = true
-		e.Preview = pg.Results[:preview]
-		ws, werr := s.ws.EnsureIn(a.WorkspaceRoot, a.WorkspaceID)
-		if werr != nil {
-			e.Note = "full page not written: " + werr.Error() + " — pass a writable 'workspace_root'"
-		} else if path, err := writeReportsFile(ws, a.IP, page, pg.Results); err != nil {
-			e.Note = "full page not written: " + err.Error()
-		} else {
-			e.ReportsFile = path
-		}
-	}
+	e.Reports = pg.Results
 	return jsonResult([]reportsEntry{e})
-}
-
-// writeReportsFile writes the full page of reports as JSON into the workspace.
-func writeReportsFile(ws *workspace.Workspace, ip string, page int, reports []abuseipdb.Report) (string, error) {
-	b, err := json.MarshalIndent(reports, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	safe := strings.NewReplacer(":", "-", "/", "-").Replace(ip)
-	name := fmt.Sprintf("reports-%s-p%d.json", safe, page)
-	return ws.WriteFileAtomic(name, b)
 }
 
 func (s *server) toolCacheStatus() toolResult {

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,11 +47,10 @@ func makeReports(n int) []abuseipdb.Report {
 func newEngine(t *testing.T, mc *mockClient) *engine.Engine {
 	t.Helper()
 	cfg := &config.Config{
-		BaseURL:   "https://example.test",
-		CacheDir:  t.TempDir(),
-		CacheTTL:  time.Hour,
-		Workspace: filepath.Join(t.TempDir(), "ws"),
-		APIKey:    "x",
+		BaseURL:  "https://example.test",
+		CacheDir: t.TempDir(),
+		CacheTTL: time.Hour,
+		APIKey:   "x",
 	}
 	return engine.New(cfg, mc)
 }
@@ -142,7 +139,7 @@ func TestServeSequence(t *testing.T) {
 	}
 
 	text, _ = callText(t, resps[3].Result)
-	if !strings.Contains(text, `"total": 2`) || !strings.Contains(text, `"truncated": false`) {
+	if !strings.Contains(text, `"total": 2`) || !strings.Contains(text, `"reports"`) {
 		t.Errorf("get_reports text = %s", text)
 	}
 
@@ -187,60 +184,80 @@ func TestCheckIPInvalid(t *testing.T) {
 	}
 }
 
-func TestGetReportsWritesFileWhenLarge(t *testing.T) {
+func TestGetReportsReturnsWholePageInline(t *testing.T) {
 	mc := &mockClient{reports: &abuseipdb.ReportsPage{
 		Total: 100, Page: 1, Count: 30, PerPage: 30,
 		NextPageURL: "/api/v2/reports?page=2", Results: makeReports(30),
 	}}
 	e := newEngine(t, mc)
-	wsRoot := t.TempDir()
-	req := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_reports","arguments":{"ip":"1.2.3.4","per_page":30,"limit":10,"workspace_root":%q}}}`, wsRoot)
+	req := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_reports","arguments":{"ip":"1.2.3.4","per_page":30}}}`
 	resps := drive(t, e, req)
 	text, isErr := callText(t, resps[0].Result)
 	if isErr {
 		t.Fatalf("unexpected error: %s", text)
 	}
-	var entries []map[string]any
+	var entries []struct {
+		Total       int                `json:"total"`
+		HasNextPage bool               `json:"has_next_page"`
+		Reports     []abuseipdb.Report `json:"reports"`
+	}
 	if err := json.Unmarshal([]byte(text), &entries); err != nil {
 		t.Fatalf("unmarshal: %v (%s)", err, text)
 	}
 	e0 := entries[0]
-	if e0["truncated"] != true || e0["has_next_page"] != true {
-		t.Errorf("expected truncated + has_next_page: %v", e0)
+	if len(e0.Reports) != 30 {
+		t.Errorf("the whole page must be inline: got %d reports, want 30", len(e0.Reports))
 	}
-	rf, _ := e0["reports_file"].(string)
-	if rf == "" || !strings.HasPrefix(rf, wsRoot) {
-		t.Fatalf("reports_file %q not under workspace %q", rf, wsRoot)
+	if e0.Total != 100 || !e0.HasNextPage {
+		t.Errorf("page metadata lost: %+v", e0)
 	}
-	data, err := os.ReadFile(rf)
-	if err != nil {
-		t.Fatalf("read reports_file: %v", err)
-	}
-	var written []abuseipdb.Report
-	if err := json.Unmarshal(data, &written); err != nil || len(written) != 30 {
-		t.Errorf("written file should hold 30 reports, got %d (err %v)", len(written), err)
+	// The server must not have spilled to a file: no path-bearing field
+	// may survive, or a client with no filesystem cannot read the result.
+	for _, gone := range []string{"reports_file", "truncated", "preview", "workspace"} {
+		if strings.Contains(text, gone) {
+			t.Errorf("result still carries %q — file mediation was not removed: %s", gone, text)
+		}
 	}
 }
 
-func TestGetReportsBadWorkspaceGivesNote(t *testing.T) {
-	mc := &mockClient{reports: &abuseipdb.ReportsPage{
-		Total: 100, Page: 1, Count: 30, PerPage: 30, Results: makeReports(30),
-	}}
+// Paging is what replaces the file: every report must be reachable by
+// walking pages, which is the property the file branch used to provide.
+func TestGetReportsPagingReachesEveryReport(t *testing.T) {
+	all := makeReports(5)
+	mc := &mockClient{}
 	e := newEngine(t, mc)
-	req := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_reports","arguments":{"ip":"1.2.3.4","per_page":30,"limit":10,"workspace_root":"relative/not/absolute"}}}`
-	resps := drive(t, e, req)
-	text, _ := callText(t, resps[0].Result)
-	var entries []map[string]any
-	json.Unmarshal([]byte(text), &entries)
-	e0 := entries[0]
-	if _, ok := e0["reports_file"]; ok {
-		t.Errorf("should not have written a file: %v", e0)
+
+	seen := map[string]bool{}
+	for page := 1; page <= 3; page++ {
+		lo := (page - 1) * 2
+		hi := lo + 2
+		if hi > len(all) {
+			hi = len(all)
+		}
+		mc.reports = &abuseipdb.ReportsPage{
+			Total: len(all), Page: page, Count: hi - lo, PerPage: 2,
+			Results: all[lo:hi],
+		}
+		if hi < len(all) {
+			mc.reports.NextPageURL = "/api/v2/reports?page=" + fmt.Sprint(page+1)
+		}
+		req := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_reports","arguments":{"ip":"1.2.3.4","page":%d,"per_page":2}}}`, page)
+		text, isErr := callText(t, drive(t, e, req)[0].Result)
+		if isErr {
+			t.Fatalf("page %d: %s", page, text)
+		}
+		var entries []struct {
+			Reports []abuseipdb.Report `json:"reports"`
+		}
+		if err := json.Unmarshal([]byte(text), &entries); err != nil {
+			t.Fatalf("page %d unmarshal: %v (%s)", page, err, text)
+		}
+		for _, r := range entries[0].Reports {
+			seen[r.Comment] = true
+		}
 	}
-	if note, _ := e0["note"].(string); !strings.Contains(note, "workspace_root") {
-		t.Errorf("expected note about workspace_root, got %q", e0["note"])
-	}
-	if e0["total"].(float64) != 100 {
-		t.Errorf("total = %v", e0["total"])
+	if len(seen) != len(all) {
+		t.Errorf("paging reached %d of %d reports: %v", len(seen), len(all), seen)
 	}
 }
 
@@ -248,7 +265,7 @@ func TestGetUsageManual(t *testing.T) {
 	e := newEngine(t, &mockClient{check: &abuseipdb.CheckResult{}})
 	resps := drive(t, e, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_usage"}}`)
 	text, isErr := callText(t, resps[0].Result)
-	if isErr || !strings.Contains(text, "Recovery table") || !strings.Contains(text, "workspace_root") {
+	if isErr || !strings.Contains(text, "Recovery table") || !strings.Contains(text, "per_page") {
 		t.Errorf("get_usage manual incomplete: isErr=%v", isErr)
 	}
 }

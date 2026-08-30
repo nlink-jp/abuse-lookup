@@ -51,19 +51,23 @@ API response, so collapsing them into one key would return wrong data. Reports
 are deliberately *not* cached: they are a paginated detail fetch, and pagination
 is caller-driven.
 
-## File mediation for large report pages
+## Why the server has no filesystem
 
-A single IP can have hundreds of abuse reports. Returning a full page inline
-would flood an MCP client's context, so `get_reports` returns page metadata plus
-a small preview and writes the full page to a file, returning only its path
-(`truncated: true`). This mirrors asn-lookup's `lookup_asn` and voice-studio-mcp.
+A single IP can have hundreds of abuse reports, and `get_reports` returns every
+one of them inline. It used to do the opposite: a page above a threshold was
+written to a caller-supplied `workspace_root` and only its path came back.
 
-The output directory is **agent-provided** (`workspace_root`): in a sandbox the
-server often cannot write under `$HOME`, so the caller prepares a writable
-directory with its own file tools. All writes are confined to that directory with
-`os.Root`, so a symlink planted in an agent-writable workspace cannot redirect a
-write outside it. The filename is server-generated, so the caller never controls
-the leaf name.
+That was the wrong side of the wire, for two reasons. It made the server depend
+on the client owning a filesystem it could name — a client speaking MCP over a
+transport with no shared disk could not read its own result. And it put the
+"too big for the model" judgement in the one process that cannot know the
+model's context window; only the client knows that number.
+
+So the split is: **bounding a response is the caller's job** (`per_page`), and
+**spilling an oversized response is the client's job**. The server holds no
+output directory, takes no path argument, and never writes a file. `total`,
+`count` and `has_next_page` make the full set reachable by paging, which is the
+property the file branch was really providing.
 
 ## Secret handling
 
