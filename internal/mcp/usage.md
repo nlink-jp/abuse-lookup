@@ -50,16 +50,13 @@ cached — it is a paginated detail fetch.
 
 ## Sizing a page
 
-A single `get_reports` page can hold many verbose reports, and this server
-returns every one of them inline — it never writes files and never asks you for
-a directory, so it behaves identically against a client that has no filesystem
-of its own.
+Every report on a page is returned inline; no file is written and no path comes
+back. The page size is therefore yours to set: `per_page` bounds one response,
+`has_next_page` says whether more exist, and `page` walks them.
 
-That makes the page size **your** control. `per_page` bounds one response;
-`has_next_page` tells you whether more exist, and `page` walks them. If a page
-is larger than your context can hold, ask for a smaller `per_page` rather than a
-truncated result — `total` and `count` always reflect the real numbers, so
-nothing is ever silently dropped.
+If a page is larger than your context can hold, re-request with a smaller
+`per_page`. `total` and `count` always reflect the real numbers, so nothing is
+silently dropped.
 
 ## Recovery table
 
