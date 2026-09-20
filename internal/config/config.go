@@ -91,14 +91,11 @@ func applySections(cfg *Config, sections map[string]map[string]string) error {
 			cfg.CacheDir = expandHome(v)
 		}
 		if v := c["ttl_hours"]; v != "" {
-			h, err := strconv.ParseFloat(v, 64)
+			ttl, err := parseTTLHours(v)
 			if err != nil {
 				return fmt.Errorf("[cache] ttl_hours %q: %w", v, err)
 			}
-			if h < 0 {
-				return fmt.Errorf("[cache] ttl_hours must not be negative")
-			}
-			cfg.CacheTTL = time.Duration(h * float64(time.Hour))
+			cfg.CacheTTL = ttl
 		}
 	}
 	return nil
@@ -206,4 +203,23 @@ func parseValue(v string) string {
 		v = strings.TrimSpace(v[:hash])
 	}
 	return v
+}
+
+// The range is stated from the inside. ParseFloat also reads "NaN" and "Inf",
+// and NaN fails every comparison — so a check written as "reject what is below
+// the floor" lets it through, and the Duration it becomes is whatever the
+// platform makes of NaN. The ceiling keeps a number like 1e300 from
+// overflowing a Duration into something negative.
+const maxTTLHours = 366 * 24 // a year
+
+// parseTTLHours parses a non-negative hours value into a Duration.
+func parseTTLHours(v string) (time.Duration, error) {
+	h, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, err
+	}
+	if !(h >= 0 && h <= maxTTLHours) {
+		return 0, fmt.Errorf("must be a number from 0 to %d", maxTTLHours)
+	}
+	return time.Duration(h * float64(time.Hour)), nil
 }

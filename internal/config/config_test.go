@@ -121,3 +121,19 @@ func TestNegativeTTL(t *testing.T) {
 		t.Fatal("Load: expected error for negative ttl_hours")
 	}
 }
+
+// ParseFloat reads "NaN" and "Inf", and NaN passes any range check written as
+// "reject what is below the floor". A number is accepted from inside its range.
+func TestNumbersThatAreNotNumbersAreRefused(t *testing.T) {
+	for _, in := range []string{"NaN", "nan", "Inf", "+Inf", "-Inf", "1e300", "-1"} {
+		if d, err := parseTTLHours(in); err == nil {
+			t.Errorf("parseTTLHours(%q) = %v, want a refusal", in, d)
+		}
+	}
+	if d, err := parseTTLHours("1.5"); err != nil || d <= 0 {
+		t.Errorf("parseTTLHours(\"1.5\") = %v, %v", d, err)
+	}
+	if d, err := parseTTLHours("0"); err != nil || d != 0 {
+		t.Errorf("parseTTLHours(\"0\") = %v, %v; 0 is a value here", d, err)
+	}
+}
