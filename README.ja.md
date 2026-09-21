@@ -114,6 +114,13 @@ claude mcp add abuse-lookup -- /path/to/abuse-lookup mcp
 | `get_reports` | `ip`, `max_age`, `page`, `per_page` | IP → 通報明細 1 ページ（常にインライン） |
 | `cache_status` | — | キャッシュのディレクトリ・TTL・件数 |
 
+**引数は厳格に検査されます.** ツールが宣言していない引数を含む呼び出しは、その
+名前を挙げて失敗します（`arguments: json: unknown field "refresh_"`）。従来は
+無視して実行していたため、`refresh` の綴り間違いはキャッシュ結果をライブ取得の
+結果として返していました。型が違う引数も同様に拒否されます。引数のデコードより
+前には何も実行しないので、拒否された呼び出しはクォータを消費しません。引数を
+まったく渡さない呼び出しは従来どおり「引数なし」として扱われます。
+
 **キャッシュ.** `check_ip` の結果は `(IP, max_age, verbose)` 単位で設定 TTL（既定
 12h）だけキャッシュされ、`cached: true` として**クォータを消費せず**返されます。
 `refresh: true` でライブ取得を強制できます。

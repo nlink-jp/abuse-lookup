@@ -120,6 +120,13 @@ also advertises this via the MCP `instructions` field):
 | `get_reports` | `ip`, `max_age`, `page`, `per_page` | IP → one page of reports, always inline |
 | `cache_status` | — | Cache directory, TTL, entry/fresh counts |
 
+**Arguments are checked strictly.** A call carrying an argument a tool does not
+declare fails, naming it — `arguments: json: unknown field "refresh_"` — rather
+than running without it. A misspelt `refresh` used to be dropped, returning a
+cached answer that read as a freshly fetched one. Wrong-typed arguments are
+refused the same way, and nothing runs before the arguments decode, so a
+rejected call spends no quota. Omitting arguments entirely still means "none".
+
 **Caching.** `check_ip` results are cached per `(IP, max_age, verbose)` for the
 configured TTL (default 12h) and returned with `cached: true` without spending
 quota; pass `refresh: true` to force a live lookup.

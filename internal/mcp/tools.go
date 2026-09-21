@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -33,6 +34,32 @@ func obj(props map[string]any, required ...string) map[string]any {
 		s["required"] = required
 	}
 	return s
+}
+
+// decodeArgs decodes a tool's arguments strictly: an argument the tool does not
+// declare is refused by name, and a malformed argument object is refused rather
+// than read as an empty one. Every tool decodes through here.
+//
+// obj() above is only the declared half of org ADR-021 §4 — what a
+// schema-checking client refuses before the call. This is the half that
+// actually refuses, and it is needed because not every client checks the
+// schema. The `_ = json.Unmarshal` this replaces discarded the decode error as
+// well as the unknown field, so both defects were silent in the same way: a
+// misspelt `refresh` returned a cached answer that read as a fresh one, and
+// `{"ip": 123}` ran as if no address had been given.
+func decodeArgs(raw json.RawMessage, into any) error {
+	raw = bytes.TrimSpace(raw)
+	// Omitted or null arguments mean the empty object, not an error: a tool
+	// whose arguments are all optional is legitimately called with none.
+	if len(raw) == 0 || string(raw) == "null" {
+		raw = []byte("{}")
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(into); err != nil {
+		return errors.New("arguments: " + err.Error())
+	}
+	return nil
 }
 
 // toolsList returns the advertised tool set with JSON Schema for each input.
@@ -88,12 +115,19 @@ func (s *server) toolsCall(ctx context.Context, params json.RawMessage) (toolRes
 	}
 	switch p.Name {
 	case "get_usage":
+		// No arguments — which still means "none", not "any".
+		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
+			return textResult(true, err.Error()), nil
+		}
 		return textResult(false, usageMarkdown), nil
 	case "check_ip":
 		return s.toolCheckIP(ctx, p.Arguments), nil
 	case "get_reports":
 		return s.toolGetReports(ctx, p.Arguments), nil
 	case "cache_status":
+		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
+			return textResult(true, err.Error()), nil
+		}
 		return s.toolCacheStatus(), nil
 	default:
 		return toolResult{}, &rpcError{Code: -32602, Message: "unknown tool: " + p.Name}
@@ -117,7 +151,9 @@ func (s *server) toolCheckIP(ctx context.Context, args json.RawMessage) toolResu
 		Verbose bool     `json:"verbose"`
 		Refresh bool     `json:"refresh"`
 	}
-	_ = json.Unmarshal(args, &a)
+	if err := decodeArgs(args, &a); err != nil {
+		return textResult(true, err.Error())
+	}
 	inputs := a.IPs
 	if a.IP != "" {
 		inputs = append([]string{a.IP}, inputs...)
@@ -165,7 +201,9 @@ func (s *server) toolGetReports(ctx context.Context, args json.RawMessage) toolR
 		Page    *int   `json:"page"`
 		PerPage *int   `json:"per_page"`
 	}
-	_ = json.Unmarshal(args, &a)
+	if err := decodeArgs(args, &a); err != nil {
+		return textResult(true, err.Error())
+	}
 	if a.IP == "" {
 		return textResult(true, "provide 'ip' (a single IP address)")
 	}

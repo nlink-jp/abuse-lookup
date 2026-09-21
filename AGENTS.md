@@ -76,14 +76,22 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   non-flag). Keep using it if you add positional commands.
 - **`mcp` starts without a key:** so `get_usage` / `cache_status` still work;
   API-backed tools return a clear error when no key is configured.
-- **Tool schemas are closed; the decoder is not.** Every `inputSchema` is built
-  by `obj()` in `internal/mcp/tools.go`, which sets `additionalProperties: false`
-  (org ADR-021 §10), and `TestEveryToolSchemaIsValidAndClosed` fails if a tool
-  escapes it — so build a new schema with `obj()`, not a map literal. That flag
-  is only the *declared* half: argument decoding still uses a plain
-  `json.Unmarshal`, so an unknown argument from a client that does not validate
-  the schema is silently ignored rather than refused. ADR-021 pairs the flag with
-  `json.Decoder.DisallowUnknownFields`; that half is not implemented here.
+- **Tool schemas are closed and the decoder enforces it.** Every `inputSchema`
+  is built by `obj()` in `internal/mcp/tools.go`, which sets
+  `additionalProperties: false` (org ADR-021 §10), and
+  `TestEveryToolSchemaIsValidAndClosed` fails if a tool escapes it — so build a
+  new schema with `obj()`, not a map literal. The flag is only the *declared*
+  half; the enforcing half is `decodeArgs()` beside it
+  (`json.Decoder.DisallowUnknownFields`), which every tool handler decodes
+  through, including the argument-less ones. **A call carrying an argument this
+  server does not declare now fails, naming the field, instead of being
+  silently ignored** — deliberate, per ADR-021 §4, because the schema says what
+  is allowed and the decoder is what actually refuses. `decodeArgs` also stops
+  discarding the decode error, so a wrong-typed argument no longer runs the tool
+  on zero values. Omitted or `null` arguments still mean the empty object. Do
+  not add a `_ = json.Unmarshal` back, and do not add a compatibility shim: the
+  ADR's one-release grace covers only the retired `workspace_root` spellings,
+  which this server never had.
 - **get_usage manual:** `internal/mcp/usage.md` is embedded and returned by the
   `get_usage` tool; the initialize `instructions` field points clients to it.
   When you add/rename a tool or a result field, update usage.md — `usage_test.go`

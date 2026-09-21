@@ -41,6 +41,15 @@ One page of the individual abuse reports for a single IP.
 Reports `cache_dir`, `ttl`, `entries`, and `fresh` (count within the TTL). No
 arguments.
 
+## Arguments are strict
+
+Every tool refuses an argument it does not declare, naming it:
+`arguments: json: unknown field "maxage"`. A wrong-typed argument is refused the
+same way. Nothing runs before the arguments decode, so a rejected call spends no
+quota and reaches no network — fix the name or the type and call again. This is
+the enforcing half of the closed schemas (org ADR-021 §4); a misspelt `refresh`
+used to be dropped, which returned a cached answer that read as a fresh one.
+
 ## Caching model
 
 `check_ip` results are cached per `(IP, max_age, verbose)` for the configured TTL
@@ -62,6 +71,8 @@ silently dropped.
 
 | Symptom (result text) | What it means | What to do |
 |---|---|---|
+| `arguments: json: unknown field "…"` | An argument name this tool does not declare — usually a typo | Fix the spelling and call again; the named field is the offending one. No quota was spent |
+| `arguments: json: cannot unmarshal …` | An argument of the wrong JSON type | Check the argument's type in the tool list above and call again |
 | `no AbuseIPDB API key configured` | No key is set | Ask the user to set `ABUSEIPDB_API_KEY` or `[abuseipdb] key` |
 | `AbuseIPDB daily rate limit exceeded` | The 1000/day free quota is used up | Wait for the daily reset; do not retry immediately |
 | `check_ip` → `{input, error:"invalid IP address …"}` | The input was not a valid IP | Fix the input |
