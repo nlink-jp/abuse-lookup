@@ -16,7 +16,7 @@ UI を開くのは非効率で、AI ツール（Claude Code 等）から MCP 経
 サーバー** `abuse-lookup` を用意する。対象ユーザーは org 運営者本人と、その AI
 ツール（MCP クライアント）。同じ IP を短時間に何度も引く場面があり得るため、
 TTL 付きローカルキャッシュで重複問い合わせと無料枠（1,000 checks/日）の浪費を
-抑える。オフライン DB を持つ [asn-lookup](../../../util-series/asn-lookup)（AS・国）
+抑える。オフライン DB を持つ [asn-lookup](https://github.com/nlink-jp/asn-lookup)（AS・国）
 とは**別々に呼び出して**突き合わせることで、IP を多面的に調査する。
 
 ## 2. Functional Specification

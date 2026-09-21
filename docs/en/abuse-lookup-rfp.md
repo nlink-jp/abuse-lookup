@@ -19,7 +19,7 @@ Target users are the org operator and their AI tools (MCP clients). Because the
 same IP may be looked up repeatedly in a short window, a TTL-bounded local cache
 suppresses duplicate queries and avoids wasting the free-tier budget (1,000
 checks/day). Used alongside the offline
-[asn-lookup](../../../util-series/asn-lookup) (AS / country) — called separately
+[asn-lookup](https://github.com/nlink-jp/asn-lookup) (AS / country) — called separately
 and cross-referenced — it enables multi-faceted IP investigation.
 
 ## 2. Functional Specification
