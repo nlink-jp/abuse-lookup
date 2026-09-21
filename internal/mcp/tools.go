@@ -24,6 +24,17 @@ const Instructions = "abuse-lookup checks IP reputation via the AbuseIPDB API (o
 	"The daily free quota is limited (1000 checks); a rate-limit error means wait for the daily reset. " +
 	"Call get_usage for the full tool reference and error-recovery table."
 
+// obj builds a tool's input schema. Every schema goes through here so that
+// org ADR-021 §10's `additionalProperties: false` is set once instead of being
+// remembered per tool — the next tool added gets the closed schema for free.
+func obj(props map[string]any, required ...string) map[string]any {
+	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(required) > 0 {
+		s["required"] = required
+	}
+	return s
+}
+
 // toolsList returns the advertised tool set with JSON Schema for each input.
 func (s *server) toolsList() any {
 	strArray := map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
@@ -32,42 +43,36 @@ func (s *server) toolsList() any {
 			{
 				"name":        "get_usage",
 				"description": "Return this server's operating manual (markdown): the tools, the caching model, pagination, rate limits, and the error-recovery table. Call it once before first use.",
-				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+				"inputSchema": obj(map[string]any{}),
 			},
 			{
 				"name": "check_ip",
 				"description": "Check the AbuseIPDB reputation (abuse confidence score, country, ISP, usage type, report counts, last-reported date) of one or more IP addresses. " +
 					"Results are served from a local TTL cache when fresh; pass refresh=true to force a live lookup.",
-				"inputSchema": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"ip":      map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address."},
-						"ips":     strArray,
-						"max_age": map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
-						"verbose": map[string]any{"type": "boolean", "description": "Include recent report details in each result."},
-						"refresh": map[string]any{"type": "boolean", "description": "Ignore the cache and re-fetch from the API."},
-					},
-				},
+				"inputSchema": obj(map[string]any{
+					"ip":      map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address."},
+					"ips":     strArray,
+					"max_age": map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
+					"verbose": map[string]any{"type": "boolean", "description": "Include recent report details in each result."},
+					"refresh": map[string]any{"type": "boolean", "description": "Ignore the cache and re-fetch from the API."},
+				}),
 			},
 			{
 				"name": "get_reports",
 				"description": "Fetch one page of the individual abuse reports for a single IP. " +
 					"The page is always returned inline, together with its metadata (total, page, count, has_next_page). " +
 					"Pagination is caller-driven via page / per_page: keep a page small enough for your context and walk large report sets with page.",
-				"inputSchema": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"ip":       map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address (required)."},
-						"max_age":  map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
-						"page":     map[string]any{"type": "integer", "description": "1-based page number (default 1)."},
-						"per_page": map[string]any{"type": "integer", "description": "Reports per page (default 25)."},
-					},
-				},
+				"inputSchema": obj(map[string]any{
+					"ip":       map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address (required)."},
+					"max_age":  map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
+					"page":     map[string]any{"type": "integer", "description": "1-based page number (default 1)."},
+					"per_page": map[string]any{"type": "integer", "description": "Reports per page (default 25)."},
+				}),
 			},
 			{
 				"name":        "cache_status",
 				"description": "Report the local cache directory, TTL, and how many cached reputation entries exist (and how many are still fresh).",
-				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+				"inputSchema": obj(map[string]any{}),
 			},
 		},
 	}

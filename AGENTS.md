@@ -76,6 +76,14 @@ internal/mcp/           Zero-dep stdio JSON-RPC 2.0 MCP server + tools.
   non-flag). Keep using it if you add positional commands.
 - **`mcp` starts without a key:** so `get_usage` / `cache_status` still work;
   API-backed tools return a clear error when no key is configured.
+- **Tool schemas are closed; the decoder is not.** Every `inputSchema` is built
+  by `obj()` in `internal/mcp/tools.go`, which sets `additionalProperties: false`
+  (org ADR-021 §10), and `TestEveryToolSchemaIsValidAndClosed` fails if a tool
+  escapes it — so build a new schema with `obj()`, not a map literal. That flag
+  is only the *declared* half: argument decoding still uses a plain
+  `json.Unmarshal`, so an unknown argument from a client that does not validate
+  the schema is silently ignored rather than refused. ADR-021 pairs the flag with
+  `json.Decoder.DisallowUnknownFields`; that half is not implemented here.
 - **get_usage manual:** `internal/mcp/usage.md` is embedded and returned by the
   `get_usage` tool; the initialize `instructions` field points clients to it.
   When you add/rename a tool or a result field, update usage.md — `usage_test.go`
