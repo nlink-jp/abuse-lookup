@@ -28,7 +28,7 @@ CLI **兼**ローカル MCP サーバー。IP の abuse confidence score・通�
 make build          # → dist/abuse-lookup（macOS では署名付き）
 ```
 
-Go 1.25+ が必要です。全プラットフォーム向けは `make build-all`。
+Go 1.27.4+ が必要です。全プラットフォーム向けは `make build-all`。
 
 ## クイックスタート
 

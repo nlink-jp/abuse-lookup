@@ -29,7 +29,7 @@ offline). Use them side by side to investigate an IP from multiple angles.
 make build          # → dist/abuse-lookup (signed on macOS)
 ```
 
-Requires Go 1.25+. Cross-compile all platforms with `make build-all`.
+Requires Go 1.27.4+. Cross-compile all platforms with `make build-all`.
 
 ## Quick start
 

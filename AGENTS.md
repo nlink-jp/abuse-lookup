@@ -18,7 +18,7 @@ make build-all  # cross-compile linux/{amd64,arm64}, darwin/arm64, windows/amd64
 make verify-release  # gate: notarized, fresh, runs at this version, clean linux archives (run before upload)
 ```
 
-Go 1.25+. **No external dependencies** — standard library only.
+Go 1.27.4+. **No external dependencies** — standard library only.
 
 ## Layout
 
