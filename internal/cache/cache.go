@@ -132,7 +132,9 @@ func (c *Cache) Clear() (int, error) {
 	}
 	n := 0
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+		// Entries, and the temp file an interrupted write left behind (it
+		// holds an answer too).
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".json") && !strings.HasSuffix(e.Name(), ".json.tmp")) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(c.dir, e.Name())); err != nil {
