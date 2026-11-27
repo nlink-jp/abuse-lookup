@@ -140,7 +140,11 @@ func (c *Cache) Clear() (int, error) {
 		if err := os.Remove(filepath.Join(c.dir, e.Name())); err != nil {
 			return n, err
 		}
-		n++
+		// The count is of entries, as status counts them; a temp file is
+		// removed but not counted.
+		if strings.HasSuffix(e.Name(), ".json") {
+			n++
+		}
 	}
 	return n, nil
 }
