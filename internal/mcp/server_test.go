@@ -12,6 +12,7 @@ import (
 	"github.com/nlink-jp/abuse-lookup/internal/abuseipdb"
 	"github.com/nlink-jp/abuse-lookup/internal/config"
 	"github.com/nlink-jp/abuse-lookup/internal/engine"
+	"github.com/nlink-jp/mcp/client"
 )
 
 type mockClient struct {
@@ -99,15 +100,13 @@ func TestServeSequence(t *testing.T) {
 	e := newEngine(t, mc)
 	resps := drive(t, e,
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`,
-		`{"jsonrpc":"2.0","method":"notifications/initialized"}`, // no response expected
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"check_ip","arguments":{"ip":"8.8.8.8"}}}`,
 		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_reports","arguments":{"ip":"8.8.8.8"}}}`,
 		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"cache_status"}}`,
-		`{"jsonrpc":"2.0","id":6,"method":"ping"}`,
 	)
-	if len(resps) != 6 {
-		t.Fatalf("got %d responses, want 6 (notification must be silent)", len(resps))
+	if len(resps) != 5 {
+		t.Fatalf("got %d responses, want 5", len(resps))
 	}
 
 	var initRes struct {
@@ -274,4 +273,16 @@ func TestAgainstTheProbeClients(t *testing.T) {
 	probeMatrix(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
 		return Serve(ctx, e, "test-ver", in, w)
 	})
+}
+
+// The client that opens the server receives the instructions — the hint that
+// points it at get_usage — whichever era it opens in.
+func TestOpeningCarriesTheInstructions(t *testing.T) {
+	e := newEngine(t, &mockClient{check: &abuseipdb.CheckResult{}})
+	cl := openWith(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, "test-ver", in, w)
+	}, client.Options{})
+	if got := cl.Instructions(); got != Instructions {
+		t.Errorf("instructions = %q, want the package's Instructions", got)
+	}
 }
