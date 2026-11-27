@@ -27,7 +27,10 @@ All notable changes to this project are documented here. The format follows
   - a panic in a tool is answered -32603 and the server goes on (it crashed);
   - up to 256 calls wait behind a running one; more are refused with -32603
     "server busy";
-  - `notifications/cancelled` now cancels the call A cancelled check stops its HTTP request; the cache is written whole to a temporary file and renamed (os.Root), outside any cancellation path, so nothing partial is left.
+  - `notifications/cancelled` now cancels the call.
+    A cancelled check stops its HTTP request; the cache is written whole to a
+    temporary file and renamed (os.Root), outside any cancellation path, so
+    nothing partial is left.
 
   Requests piped in are still all answered before the server exits at end of
   input.
