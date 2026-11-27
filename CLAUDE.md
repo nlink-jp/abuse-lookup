@@ -27,12 +27,13 @@ internal/cache/         TTL JSON cache; atomic write via os.Root
 internal/config/        Sectioned-TOML subset + env/flag resolution
 internal/engine/        Check (cached) / Reports (uncached) — shared by CLI & MCP
 internal/app/           Dispatch + check/reports/doctor/cache/mcp + output
-internal/mcp/           Zero-dep stdio JSON-RPC 2.0 server + tools
+internal/mcp/           MCP tools on nlink-jp/mcp's server.ToolServer (both eras; ADR-0001)
 ```
 
 Core logic takes injected dependencies for testability (the HTTP client is an
-interface, mocked in tests). **No external dependencies — standard library
-only.** See [docs/en/architecture.md](docs/en/architecture.md) for the "why".
+interface, mocked in tests). **No third-party dependencies** — the standard library, plus nlink-jp
+modules written on the same rule (`github.com/nlink-jp/mcp` for the MCP
+protocol, organization ADR-030; ADR-0001). See [docs/en/architecture.md](docs/en/architecture.md) for the "why".
 
 ## Key conventions
 

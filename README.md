@@ -16,8 +16,10 @@ offline). Use them side by side to investigate an IP from multiple angles.
   (`check_ip`, `get_reports`, `cache_status`, `get_usage`).
 - **TTL cache**: results are cached per `(IP, max-age, verbose)`; a fresh cache
   hit costs no API quota.
-- **Zero external dependencies**: standard library only (`net/http` + `net/netip`
-  + `encoding/json`).
+- **No third-party dependencies**: the standard library (`net/http` + `net/netip`
+  + `encoding/json`);
+  the MCP protocol comes from the organization's module
+  [nlink-jp/mcp](https://github.com/nlink-jp/mcp), written on the same rule.
 
 > **Data:** AbuseIPDB (<https://www.abuseipdb.com>). Attribution to AbuseIPDB is
 > **required** when presenting results. This tool queries the API with your own
@@ -93,6 +95,11 @@ batch. A rate-limit condition stops the batch (the daily quota won't recover
 until the reset).
 
 ## MCP server
+
+The server speaks both eras of the protocol: the 2026-07-28 revision (clients
+that probe with `server/discover`) and the earlier `initialize` handshake
+(2025-11-25, 2025-06-18, 2024-11-05). Requests piped in are all answered before
+it exits at end of input.
 
 Register the server with an MCP client. For Claude Code:
 

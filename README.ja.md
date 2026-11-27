@@ -16,7 +16,8 @@ CLI **兼**ローカル MCP サーバー。IP の abuse confidence score・通�
   （`check_ip` / `get_reports` / `cache_status` / `get_usage`）を駆動。
 - **TTL キャッシュ**: `(IP, max-age, verbose)` 単位でキャッシュ。鮮度内のヒットは
   API クォータを消費しません。
-- **外部依存ゼロ**: 標準ライブラリのみ（`net/http` + `net/netip` + `encoding/json`）。
+- **サードパーティ製の依存なし**: 標準ライブラリ（`net/http` + `net/netip` + `encoding/json`）。MCP のプロトコルには、同じ規則で書かれた組織の共通モジュール
+  [nlink-jp/mcp](https://github.com/nlink-jp/mcp) を使います。
 
 > **データ:** AbuseIPDB (<https://www.abuseipdb.com>)。結果を提示する際は
 > AbuseIPDB への**クレジット表記が必須**です。本ツールは各自のキーで API を照会し、
@@ -88,6 +89,10 @@ cat ips.txt | abuse-lookup check --json | jq 'select(.abuseConfidenceScore >= 75
 
 ## MCP サーバー
 
+サーバーは、プロトコルの新旧両方の時代を話します。2026-07-28 版（`server/discover` で探るクライアント）と、
+それより前の `initialize` の握手（2025-11-25・2025-06-18・2024-11-05）です。パイプで流し込んだ要求には、
+入力の終わりで終了する前にすべて答えます。
+
 MCP クライアントに登録します。Claude Code の場合:
 
 ```bash
@@ -104,8 +109,8 @@ claude mcp add abuse-lookup -- /path/to/abuse-lookup mcp
 }
 ```
 
-ツール（最初に `get_usage` を呼ぶとマニュアルとリカバリ表が得られます。`initialize`
-の `instructions` フィールドでも案内します）:
+ツール（最初に `get_usage` を呼ぶとマニュアルとリカバリ表が得られます。サーバーは MCP の
+`instructions` フィールドでもそう案内します）:
 
 | ツール | 引数 | 用途 |
 |------|-----------|---------|
