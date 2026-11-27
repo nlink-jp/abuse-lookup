@@ -31,7 +31,7 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
    are -32602; `arguments` that is not an object is -32602; `"id":null` and a request without `"jsonrpc"` are -32600;
    framing changes from `json.Decoder` to one message per line (16 MiB); parse errors and batches no longer end the
    server; a panic is answered -32603; up to 256 calls wait, more get -32603 "server busy".
-5. **Cancellation (policy §5)**: `notifications/cancelled` now cancels the call's ctx. A cancelled check stops its HTTP request; the cache is written whole to a temporary file and renamed (os.Root), outside any cancellation path, so no entry is ever partial; a temp file left by a process ended part-way (a SIGTERM past the shutdown grace) is removed by `cache clear`.
+5. **Cancellation (policy §5)**: `notifications/cancelled` now cancels the call's ctx. A cancelled check stops its HTTP request; the cache is written whole to a temporary file and renamed (os.Root), outside any cancellation path, so no entry is ever partial; a temp file left by a process ended part-way (a SIGTERM past the shutdown grace) is removed by `abuse-lookup cache --clear`.
 6. **Signals (policy §2)**: the `mcp` subcommand passes `Serve` a ctx cancelled by SIGINT and SIGTERM.
 7. **Dependency and version**: `github.com/nlink-jp/mcp` is added; minor (v0.4.0).
 
@@ -39,7 +39,7 @@ Follow the common policy (nlink-jp/mcp's `docs/en/server-migration.md`, v0.3.0) 
 
 - An argument spelt in another case (`{"IP": ...}`) was accepted as the declared one; it is now refused by name.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
-- `cache clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
+- `abuse-lookup cache --clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
 
 ## Consequences
 

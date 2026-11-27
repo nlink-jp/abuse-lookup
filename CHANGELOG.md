@@ -31,7 +31,7 @@ All notable changes to this project are documented here. The format follows
     A cancelled check stops its HTTP request; the cache is written whole to a
     temporary file and renamed (os.Root), outside any cancellation path, so no
     entry is ever partial; a temp file left by a process ended part-way (a
-    SIGTERM past the shutdown grace) is removed by `cache clear`.
+    SIGTERM past the shutdown grace) is removed by `abuse-lookup cache --clear`.
 
   Requests piped in are still all answered before the server exits at end of
   input.
@@ -40,7 +40,7 @@ All notable changes to this project are documented here. The format follows
 
 - An argument spelt in another case (`{"IP": ...}`) was accepted as the declared one; it is now refused by name.
 - SIGINT or SIGTERM ended the MCP server by killing the process; a signal now ends it through its context, so its cleanup runs.
-- `cache clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
+- `abuse-lookup cache --clear` left behind the temp file a write leaves when the process ends part-way (a SIGTERM past the shutdown grace, a crash); it now removes it too.
 
 ## [0.3.2] - 2026-11-27
 
