@@ -16,8 +16,8 @@ import (
 //go:embed usage.md
 var usageMarkdown string
 
-// Instructions is the initialize-time hint (surfaced via the MCP `instructions`
-// field) that makes get_usage discoverable and steers clients away from common
+// Instructions is the hint a client receives when it opens the server (the MCP
+// `instructions` field, in initialize or server/discover) that makes get_usage discoverable and steers clients away from common
 // errors.
 const Instructions = "abuse-lookup checks IP reputation via the AbuseIPDB API (online; an API key must be configured). " +
 	"Results are cached locally with a TTL, so repeated check_ip calls do not re-spend the daily quota. " +
@@ -62,75 +62,69 @@ func decodeArgs(raw json.RawMessage, into any) error {
 	return nil
 }
 
+
 // toolsList returns the advertised tool set with JSON Schema for each input.
-func (s *server) toolsList() any {
+func (s *server) toolsList() []map[string]any {
 	strArray := map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
-	return map[string]any{
-		"tools": []map[string]any{
-			{
-				"name":        "get_usage",
-				"description": "Return this server's operating manual (markdown): the tools, the caching model, pagination, rate limits, and the error-recovery table. Call it once before first use.",
-				"inputSchema": obj(map[string]any{}),
-			},
-			{
-				"name": "check_ip",
-				"description": "Check the AbuseIPDB reputation (abuse confidence score, country, ISP, usage type, report counts, last-reported date) of one or more IP addresses. " +
-					"Results are served from a local TTL cache when fresh; pass refresh=true to force a live lookup.",
-				"inputSchema": obj(map[string]any{
-					"ip":      map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address."},
-					"ips":     strArray,
-					"max_age": map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
-					"verbose": map[string]any{"type": "boolean", "description": "Include recent report details in each result."},
-					"refresh": map[string]any{"type": "boolean", "description": "Ignore the cache and re-fetch from the API."},
-				}),
-			},
-			{
-				"name": "get_reports",
-				"description": "Fetch one page of the individual abuse reports for a single IP. " +
-					"The page is always returned inline, together with its metadata (total, page, count, has_next_page). " +
-					"Pagination is caller-driven via page / per_page: keep a page small enough for your context and walk large report sets with page.",
-				"inputSchema": obj(map[string]any{
-					"ip":       map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address (required)."},
-					"max_age":  map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
-					"page":     map[string]any{"type": "integer", "description": "1-based page number (default 1)."},
-					"per_page": map[string]any{"type": "integer", "description": "Reports per page (default 25)."},
-				}),
-			},
-			{
-				"name":        "cache_status",
-				"description": "Report the local cache directory, TTL, and how many cached reputation entries exist (and how many are still fresh).",
-				"inputSchema": obj(map[string]any{}),
-			},
+	return []map[string]any{
+		{
+			"name":        "get_usage",
+			"description": "Return this server's operating manual (markdown): the tools, the caching model, pagination, rate limits, and the error-recovery table. Call it once before first use.",
+			"inputSchema": obj(map[string]any{}),
+		},
+		{
+			"name": "check_ip",
+			"description": "Check the AbuseIPDB reputation (abuse confidence score, country, ISP, usage type, report counts, last-reported date) of one or more IP addresses. " +
+				"Results are served from a local TTL cache when fresh; pass refresh=true to force a live lookup.",
+			"inputSchema": obj(map[string]any{
+				"ip":      map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address."},
+				"ips":     strArray,
+				"max_age": map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
+				"verbose": map[string]any{"type": "boolean", "description": "Include recent report details in each result."},
+				"refresh": map[string]any{"type": "boolean", "description": "Ignore the cache and re-fetch from the API."},
+			}),
+		},
+		{
+			"name": "get_reports",
+			"description": "Fetch one page of the individual abuse reports for a single IP. " +
+				"The page is always returned inline, together with its metadata (total, page, count, has_next_page). " +
+				"Pagination is caller-driven via page / per_page: keep a page small enough for your context and walk large report sets with page.",
+			"inputSchema": obj(map[string]any{
+				"ip":       map[string]any{"type": "string", "description": "A single IPv4 or IPv6 address (required)."},
+				"max_age":  map[string]any{"type": "integer", "description": "Report look-back window in days (default 90)."},
+				"page":     map[string]any{"type": "integer", "description": "1-based page number (default 1)."},
+				"per_page": map[string]any{"type": "integer", "description": "Reports per page (default 25)."},
+			}),
+		},
+		{
+			"name":        "cache_status",
+			"description": "Report the local cache directory, TTL, and how many cached reputation entries exist (and how many are still fresh).",
+			"inputSchema": obj(map[string]any{}),
 		},
 	}
 }
 
-func (s *server) toolsCall(ctx context.Context, params json.RawMessage) (toolResult, *rpcError) {
-	var p struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-	}
-	if err := json.Unmarshal(params, &p); err != nil {
-		return toolResult{}, &rpcError{Code: -32602, Message: "invalid params: " + err.Error()}
-	}
-	switch p.Name {
+// toolsCall dispatches one call by tool name and builds its result.
+func (s *server) toolsCall(ctx context.Context, name string, args json.RawMessage) toolResult {
+	switch name {
 	case "get_usage":
 		// No arguments — which still means "none", not "any".
-		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
-			return textResult(true, err.Error()), nil
+		if err := decodeArgs(args, &struct{}{}); err != nil {
+			return textResult(true, err.Error())
 		}
-		return textResult(false, usageMarkdown), nil
+		return textResult(false, usageMarkdown)
 	case "check_ip":
-		return s.toolCheckIP(ctx, p.Arguments), nil
+		return s.toolCheckIP(ctx, args)
 	case "get_reports":
-		return s.toolGetReports(ctx, p.Arguments), nil
+		return s.toolGetReports(ctx, args)
 	case "cache_status":
-		if err := decodeArgs(p.Arguments, &struct{}{}); err != nil {
-			return textResult(true, err.Error()), nil
+		if err := decodeArgs(args, &struct{}{}); err != nil {
+			return textResult(true, err.Error())
 		}
-		return s.toolCacheStatus(), nil
+		return s.toolCacheStatus()
 	default:
-		return toolResult{}, &rpcError{Code: -32602, Message: "unknown tool: " + p.Name}
+		// Not reached: the protocol layer refuses a tool it did not register.
+		return textResult(true, "unknown tool: "+name)
 	}
 }
 

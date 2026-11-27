@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -63,13 +62,11 @@ type rawResp struct {
 
 func drive(t *testing.T, e *engine.Engine, requests ...string) []rawResp {
 	t.Helper()
-	in := strings.NewReader(strings.Join(requests, "\n") + "\n")
-	var out bytes.Buffer
-	if err := Serve(context.Background(), e, "test-ver", in, &out); err != nil {
-		t.Fatalf("Serve: %v", err)
-	}
+	out := serveOverClient(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, "test-ver", in, w)
+	}, strings.Join(requests, "\n")+"\n")
 	var resps []rawResp
-	dec := json.NewDecoder(&out)
+	dec := json.NewDecoder(out)
 	for {
 		var r rawResp
 		if err := dec.Decode(&r); err == io.EOF {
@@ -270,32 +267,11 @@ func TestGetUsageManual(t *testing.T) {
 	}
 }
 
-func TestUnknownMethod(t *testing.T) {
+// ADR-030 §7: the server against the three probe clients (legacy only,
+// dual-era, modern only).
+func TestAgainstTheProbeClients(t *testing.T) {
 	e := newEngine(t, &mockClient{check: &abuseipdb.CheckResult{}})
-	resps := drive(t, e, `{"jsonrpc":"2.0","id":9,"method":"bogus/method"}`)
-	if resps[0].Error == nil || resps[0].Error.Code != -32601 {
-		t.Errorf("expected -32601 method not found, got %+v", resps[0].Error)
-	}
-}
-
-func TestInitializeNegotiatesProtocolVersion(t *testing.T) {
-	cases := []struct{ params, want string }{
-		{`{"protocolVersion":"2025-11-25"}`, "2025-11-25"},
-		{`{"protocolVersion":"2025-06-18"}`, "2025-06-18"},
-		{`{"protocolVersion":"2024-11-05"}`, "2024-11-05"},
-		// 2025-03-26 requires accepting JSON-RPC batches, which this server does not.
-		{`{"protocolVersion":"2025-03-26"}`, "2025-11-25"},
-		// A revision the server does not satisfy must not be echoed back.
-		{`{"protocolVersion":"2026-07-28"}`, "2025-11-25"},
-		{`{"protocolVersion":""}`, "2025-11-25"},
-		{`{}`, "2025-11-25"},
-		{`not json`, "2025-11-25"},
-		{``, "2025-11-25"},
-	}
-	for _, c := range cases {
-		res := (&server{}).initializeResult(json.RawMessage(c.params)).(map[string]any)
-		if got := res["protocolVersion"]; got != c.want {
-			t.Errorf("initialize %s: protocolVersion = %v, want %s", c.params, got, c.want)
-		}
-	}
+	probeMatrix(t, func(ctx context.Context, in io.Reader, w io.Writer) error {
+		return Serve(ctx, e, "test-ver", in, w)
+	})
 }
