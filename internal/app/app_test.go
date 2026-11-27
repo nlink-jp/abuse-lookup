@@ -2,7 +2,9 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +12,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/nlink-jp/mcp"
+	"github.com/nlink-jp/mcp/client"
 )
 
 const sampleBody = `{"data":{"ipAddress":"118.25.6.39","isPublic":true,"ipVersion":4,` +
@@ -280,16 +286,66 @@ func TestCmdReportsHumanAndJSON(t *testing.T) {
 	}
 }
 
+// The served subcommand answers a client: opened with nlink-jp/mcp's client
+// over pipes, it names itself (server-migration §6).
 func TestCmdMCPHandshake(t *testing.T) {
 	clearEnv(t)
 	cfg := writeConfig(t, "https://example.test", "k")
-	in := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n")
-	var out, errw bytes.Buffer
-	if code := cmdMCP([]string{"--config", cfg}, "test-ver", in, &out, &errw); code != 0 {
-		t.Fatalf("mcp exit = %d, stderr=%s", code, errw.String())
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	done := make(chan int, 1)
+	go func() {
+		var errw bytes.Buffer
+		done <- cmdMCP([]string{"--config", cfg}, "test-ver", inR, outW, &errw)
+		_ = outW.Close()
+	}()
+	conn, err := client.NewLineConn(outR, inW, func() { _ = inW.Close() }, client.LineOptions{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), `"name":"abuse-lookup"`) {
-		t.Errorf("initialize response missing serverInfo:\n%s", out.String())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cl, err := client.Open(ctx, conn, client.Options{Client: mcp.Implementation{Name: "test", Version: "0"}})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if name := cl.Server().Name; name != "abuse-lookup" {
+		t.Errorf("serverInfo.name = %q", name)
+	}
+	_ = cl.Close()
+	if code := <-done; code != 0 {
+		t.Errorf("mcp exit = %d", code)
+	}
+}
+
+// SIGINT and SIGTERM end the MCP server through its ctx, even while stdin is
+// open (server-migration §2). Served on context.Background(), a signal
+// killed the process instead, and this waits in vain.
+func TestASignalEndsTheMCPServer(t *testing.T) {
+	clearEnv(t)
+	cfg := writeConfig(t, "https://example.test", "k")
+	defer func(orig func(context.Context, ...os.Signal) (context.Context, context.CancelFunc)) {
+		notifyContext = orig
+	}(notifyContext)
+	notifyContext = func(parent context.Context, _ ...os.Signal) (context.Context, context.CancelFunc) {
+		ctx, cancel := context.WithCancel(parent)
+		go func() { time.Sleep(100 * time.Millisecond); cancel() }() // the signal arrives
+		return ctx, cancel
+	}
+	inR, inW := io.Pipe()
+	defer func() { _ = inW.Close() }()
+	done := make(chan int, 1)
+	go func() {
+		var out, errw bytes.Buffer
+		done <- cmdMCP([]string{"--config", cfg}, "test-ver", inR, &out, &errw)
+	}()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Errorf("exit code = %d, want 0", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the MCP server did not end on the signal")
 	}
 }
 

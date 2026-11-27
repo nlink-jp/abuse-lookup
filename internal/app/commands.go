@@ -7,6 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/nlink-jp/abuse-lookup/internal/abuseipdb"
@@ -169,6 +172,9 @@ func cmdReports(args []string, out, errw io.Writer, stdin io.Reader) int {
 	return exit
 }
 
+// notifyContext is signal.NotifyContext; a test stands in for the signal.
+var notifyContext = signal.NotifyContext
+
 // cmdMCP runs the local stdio MCP server. It starts even without an API key so
 // get_usage / cache_status remain usable; API-backed tools report a clear error.
 func cmdMCP(args []string, version string, in io.Reader, out, errw io.Writer) int {
@@ -184,7 +190,11 @@ func cmdMCP(args []string, version string, in io.Reader, out, errw io.Writer) in
 		fmt.Fprintf(errw, "error: %v\n", err)
 		return 1
 	}
-	if err := mcp.Serve(context.Background(), eng, version, in, out); err != nil {
+	// SIGINT and SIGTERM cancel the server's ctx: it returns at once and its
+	// cleanup runs (server-migration §2).
+	ctx, stop := notifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := mcp.Serve(ctx, eng, version, in, out); err != nil {
 		fmt.Fprintf(errw, "mcp: %v\n", err)
 		return 1
 	}
